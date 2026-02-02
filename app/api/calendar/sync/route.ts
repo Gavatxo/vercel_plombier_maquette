@@ -8,6 +8,7 @@ import { auth } from "@/auth";
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
+    console.log("Calendar sync - Session user:", session?.user?.email || "no email");
 
     if (!session?.user) {
       return NextResponse.json(
@@ -25,7 +26,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { appointmentId } = await request.json();
+    const body = await request.json();
+    const { appointmentId } = body;
+    console.log("Calendar sync - Appointment ID:", appointmentId);
 
     if (!appointmentId) {
       return NextResponse.json(
@@ -35,8 +38,11 @@ export async function POST(request: NextRequest) {
     }
 
     await dbConnect();
+    console.log("Calendar sync - Connected to DB");
 
     const token = await GoogleToken.findOne({ user_email: userEmail });
+    console.log("Calendar sync - Token found:", !!token);
+    console.log("Calendar sync - Has refresh token:", !!token?.refresh_token);
 
     if (!token) {
       return NextResponse.json(
@@ -45,7 +51,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!token.refresh_token) {
+      return NextResponse.json(
+        { error: "Token de rafraîchissement manquant. Veuillez reconnecter Google Calendar." },
+        { status: 400 }
+      );
+    }
+
     const appointment = await Appointment.findOne({ id: appointmentId });
+    console.log("Calendar sync - Appointment found:", !!appointment);
 
     if (!appointment) {
       return NextResponse.json(
@@ -53,6 +67,12 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+
+    console.log("Calendar sync - Appointment data:", {
+      client_name: appointment.client_name,
+      preferred_date: appointment.preferred_date,
+      preferred_time: appointment.preferred_time,
+    });
 
     const event = await createCalendarEvent(token.access_token, token.refresh_token, {
       client_name: appointment.client_name,
@@ -69,15 +89,27 @@ export async function POST(request: NextRequest) {
       { google_calendar_event_id: event.id }
     );
 
+    console.log("Calendar sync - Success, event ID:", event.id);
+
     return NextResponse.json({
       success: true,
       eventId: event.id,
       eventLink: event.htmlLink,
     });
-  } catch (error) {
-    console.error("Error syncing to Google Calendar:", error);
+  } catch (error: any) {
+    console.error("Calendar sync - Error:", error.message);
+    console.error("Calendar sync - Full error:", error);
+
+    // Check for specific Google API errors
+    if (error.message?.includes("invalid_grant") || error.message?.includes("Token has been expired")) {
+      return NextResponse.json(
+        { error: "Session Google expirée. Veuillez reconnecter Google Calendar depuis le Dashboard." },
+        { status: 401 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Erreur lors de la synchronisation avec Google Calendar" },
+      { error: `Erreur: ${error.message || "Erreur lors de la synchronisation"}` },
       { status: 500 }
     );
   }

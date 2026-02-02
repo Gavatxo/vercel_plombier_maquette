@@ -1,20 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Appointment from "@/models/Appointment";
+import GoogleToken from "@/models/GoogleToken";
 import { createCalendarEvent } from "@/lib/google-calendar";
+import { auth } from "@/auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const { appointmentId, accessToken, refreshToken } = await request.json();
+    const session = await auth();
 
-    if (!appointmentId || !accessToken || !refreshToken) {
+    if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "Paramètres manquants" },
+        { error: "Non autorisé" },
+        { status: 401 }
+      );
+    }
+
+    const { appointmentId } = await request.json();
+
+    if (!appointmentId) {
+      return NextResponse.json(
+        { error: "ID du rendez-vous manquant" },
         { status: 400 }
       );
     }
 
     await dbConnect();
+
+    const token = await GoogleToken.findOne({ user_email: session.user.email });
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Google Calendar non connecté. Veuillez d'abord connecter votre compte Google." },
+        { status: 400 }
+      );
+    }
+
     const appointment = await Appointment.findOne({ id: appointmentId });
 
     if (!appointment) {
@@ -24,8 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Créer l'événement dans Google Calendar
-    const event = await createCalendarEvent(accessToken, refreshToken, {
+    const event = await createCalendarEvent(token.access_token, token.refresh_token, {
       client_name: appointment.client_name,
       client_phone: appointment.client_phone,
       intervention_type: appointment.intervention_type,
@@ -35,7 +55,6 @@ export async function POST(request: NextRequest) {
       description: appointment.description,
     });
 
-    // Mettre à jour le rendez-vous avec l'ID de l'événement Google Calendar
     await Appointment.findOneAndUpdate(
       { id: appointmentId },
       { google_calendar_event_id: event.id }

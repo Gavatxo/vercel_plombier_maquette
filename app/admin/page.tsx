@@ -5,6 +5,7 @@ import dbConnect from "@/lib/mongodb";
 import Appointment from "@/models/Appointment";
 import Quote from "@/models/Quote";
 import Realisation from "@/models/Realisation";
+import { GoogleCalendarButton } from "@/components/admin/GoogleCalendarButton";
 
 async function getStats() {
   try {
@@ -65,11 +66,14 @@ export default async function AdminDashboard() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-600 mt-1">
-          Bienvenue, {session.user.name || "Administrateur"}
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+          <p className="text-slate-600 mt-1">
+            Bienvenue, {session.user.name || "Administrateur"}
+          </p>
+        </div>
+        <GoogleCalendarButton />
       </div>
 
       {/* Stats Cards */}

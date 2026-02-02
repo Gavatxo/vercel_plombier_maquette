@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Clock, MapPin, Phone, User, Check, X } from "lucide-react";
+import { Calendar, Clock, MapPin, Phone, Check, X, CalendarPlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Appointment {
@@ -20,6 +20,7 @@ interface Appointment {
   description?: string;
   status: string;
   created_at: string;
+  google_calendar_event_id?: string;
 }
 
 const statusLabels: Record<string, string> = {
@@ -50,6 +51,8 @@ export default function AppointmentsAdminPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [calendarConnected, setCalendarConnected] = useState(false);
 
   const fetchAppointments = async () => {
     try {
@@ -65,8 +68,19 @@ export default function AppointmentsAdminPage() {
     }
   };
 
+  const checkCalendarStatus = async () => {
+    try {
+      const response = await fetch("/api/calendar/status");
+      const data = await response.json();
+      setCalendarConnected(data.connected);
+    } catch (error) {
+      console.error("Error checking calendar status:", error);
+    }
+  };
+
   useEffect(() => {
     fetchAppointments();
+    checkCalendarStatus();
   }, []);
 
   const updateStatus = async (id: string, status: string) => {
@@ -83,6 +97,30 @@ export default function AppointmentsAdminPage() {
       }
     } catch (error) {
       toast.error("Erreur lors de la mise à jour");
+    }
+  };
+
+  const syncToCalendar = async (appointmentId: string) => {
+    setSyncingId(appointmentId);
+    try {
+      const response = await fetch("/api/calendar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointmentId }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success("RDV ajouté à Google Calendar !");
+        fetchAppointments();
+      } else {
+        toast.error(data.error || "Erreur lors de la synchronisation");
+      }
+    } catch (error) {
+      toast.error("Erreur lors de la synchronisation");
+    } finally {
+      setSyncingId(null);
     }
   };
 
@@ -132,6 +170,12 @@ export default function AppointmentsAdminPage() {
                       <Badge variant="outline">
                         {interventionLabels[appointment.intervention_type] || appointment.intervention_type}
                       </Badge>
+                      {appointment.google_calendar_event_id && (
+                        <Badge className="bg-green-100 text-green-800">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          Sync
+                        </Badge>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-4 text-sm text-slate-600">
@@ -161,6 +205,22 @@ export default function AppointmentsAdminPage() {
                   </div>
 
                   <div className="flex gap-2">
+                    {calendarConnected && !appointment.google_calendar_event_id && appointment.status !== "cancelled" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => syncToCalendar(appointment.id)}
+                        disabled={syncingId === appointment.id}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        {syncingId === appointment.id ? (
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        ) : (
+                          <CalendarPlus className="w-4 h-4 mr-1" />
+                        )}
+                        Ajouter au calendrier
+                      </Button>
+                    )}
                     {appointment.status === "pending" && (
                       <>
                         <Button

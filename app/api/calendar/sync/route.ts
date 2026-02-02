@@ -9,10 +9,19 @@ export async function POST(request: NextRequest) {
   try {
     const session = await auth();
 
-    if (!session?.user?.email) {
+    if (!session?.user) {
       return NextResponse.json(
         { error: "Non autorisé" },
         { status: 401 }
+      );
+    }
+
+    const userEmail = session.user.email || process.env.ADMIN_EMAIL;
+
+    if (!userEmail) {
+      return NextResponse.json(
+        { error: "Email non trouvé" },
+        { status: 400 }
       );
     }
 
@@ -27,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     await dbConnect();
 
-    const token = await GoogleToken.findOne({ user_email: session.user.email });
+    const token = await GoogleToken.findOne({ user_email: userEmail });
 
     if (!token) {
       return NextResponse.json(

@@ -45,6 +45,7 @@ export const authConfig: NextAuthConfig = {
     async session({ session, token }) {
       if (session?.user) {
         (session.user as any).role = token.role;
+        (session.user as any).email = token.email;
       }
       return session;
     },

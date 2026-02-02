@@ -7,12 +7,18 @@ export async function GET() {
   try {
     const session = await auth();
 
-    if (!session?.user?.email) {
+    if (!session?.user) {
+      return NextResponse.json({ connected: false });
+    }
+
+    const userEmail = session.user.email || process.env.ADMIN_EMAIL;
+
+    if (!userEmail) {
       return NextResponse.json({ connected: false });
     }
 
     await dbConnect();
-    const token = await GoogleToken.findOne({ user_email: session.user.email });
+    const token = await GoogleToken.findOne({ user_email: userEmail });
 
     return NextResponse.json({
       connected: !!token,
